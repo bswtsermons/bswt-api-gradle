@@ -13,26 +13,45 @@ import com.amazonaws.regions.Regions
 
 @Slf4j
 class WavRepositoryService {
-	// TODO make this externally configurable
-	def plinkPath = new File("c:\\Program Files (x86)\\PuTTY\\plink.exe")
-	def pscpPath = new File("c:\\Program Files (x86)\\PuTTY\\pscp.exe")
-	def lamePath = "C:\\Program Files\\lame3.100-64\\lame.exe"
-	def sshUser = "bswt"
-	def bucketName = 'audio.bswt.org'
-	def sshHost = "www.bswt.org"
-	def bswtMp3Dir = 'media/audio/mp3'
-	def bswtHqMp3Dir = bswtMp3Dir + '/hq'
-	def localWavDir = Paths.get System.properties.get('user.home'), 'Music', 'Services'
-	def localMp3Dir = localWavDir.resolve 'mp3'
-	def localHqMp3Dir = localMp3Dir.resolve 'hq'
+	def plinkPath = Paths.get(System.properties.'bswt.wrp.plinkPath')
+	def pscpPath = Paths.get(System.properties.'bswt.wrp.pscpPath')
+	def lamePath = Paths.get(System.properties.'bswt.wrp.lamePath')
+	def localWavDir = Paths.get(System.properties.'bswt.wrp.dir.wav')
+	def localMp3Dir = Paths.get(System.properties.'bswt.wrp.dir.mp3')
+	def localHqMp3Dir = Paths.get(System.properties.'bswt.wrp.dir.mp3.hq')
+	
+	def bucketName = System.properties.'bswt.wrp.aws.s3.audio.bucket'
+	def sshUser = System.properties.'bswt.wrp.ssh.user'
+	def sshHost = System.properties.'bswt.wrp.ssh.host'
+	def bswtMp3Dir = System.properties.'bswt.wrp.ssh.dir.mp3'
+	def bswtHqMp3Dir = System.properties.'bswt.wrp.ssh.dir.mp3.hq'
+	
+	def checkConfigs()	{
+		assert plinkPath.toFile().exists() : "Specified plink executable exists"
+		assert pscpPath.toFile().exists() : "Specified pscp executable exists"
+		assert lamePath.toFile().exists() : "Specified lame executable exists"
+		
+		// maybe we want this to create automatically instead?
+		assert localWavDir.toFile().exists() : "Specified wav directory does not exist"
+		assert localMp3Dir : "No local mp3 directory specified"
+		assert localHqMp3Dir : "No local hq mp3 directory specified"
+		
+		assert bucketName : "No aws s3 audio bucket name specified"
+		assert sshUser : "No ssh user specified"
+		assert sshHost : "No ssh host specified"
+		assert bswtMp3Dir : "No remote mp3 directory specified"
+		assert bswtHqMp3Dir : "No remote hq mp3 directory specified"
+	}
 	
 	def executeCommand(cmd) {
+		log.debug 'executing command {}', cmd
 		def process = new ProcessBuilder(cmd)
 				.redirectErrorStream(true)
 				.start()
 		process.waitFor()
 		if (process.exitValue() != 0) {
-			println process.inputStream.eachLine { println it }
+			log.error "could not execute command, error follows"
+			process.inputStream.eachLine { log.error it }
 		}
 		assert process.exitValue() == 0
 		
@@ -43,15 +62,6 @@ class WavRepositoryService {
 	def executePlinkCommand(cmd) {
 		executeCommand([ plinkPath.toString(), "-batch", sshUser+"@"+sshHost ] + cmd)
 	}
-	
-	/*
-	def uploadPartialThenRename(file1, file2) {
-		log.debug 'uploading lq mp3'
-		def process = pscpCopy([ file1, file2+'.part' ])
-		log.debug 'rename partial {} to {}', file2+'.part', file2
-		process = executePlinkCommand([ 'mv', file2+'.part', file2  ])
-	}
-	*/
 	
 	def pscpCopy(file1, file2) {
 		executeCommand( [ pscpPath.toString(), "-q", file1, file2 ])
@@ -90,27 +100,7 @@ class WavRepositoryService {
 		log.debug 'bswt sids: {}', sids
 		
 		sids
-		
-		/* get this to work with pageant
-		def ssh = org.hidetake.groovy.ssh.Ssh.newService()
-		ssh.settings {
-			knownHosts = allowAnyHosts
-			agentForwarding = true
-		}
-		ssh.remotes {
-			bswt {
-				host = 'www.bswt.org'
-				user = 'bswt'
-				agentForwarding = true
-			}
-		}
-		
-		ssh.run {
-			session(ssh.remotes.bswt) {
-				execute 'ls'
-			}
-		}
-		*/
+
 	}
 	
 	def getLocalWavs() {
@@ -142,13 +132,12 @@ class WavRepositoryService {
 		log.debug 'rename partial'
 		process = executePlinkCommand([ 'mv', remoteHqPath+'.part', remoteHqPath  ])
 		
-		println remotePath
 	}
 	
 	def makeMp3s(String sid) {
 		if (!localHqMp3Dir.toFile().exists()) {
 			log.info 'mp3 directory {} did not exist; creating', localHqMp3Dir
-			localHqMp3Dir.mkdirs();
+			localHqMp3Dir.toFile().mkdirs();
 		}
 		
 		def wavFile = new File(localWavDir.toFile(), sid + '.wav')
@@ -178,15 +167,14 @@ class WavRepositoryService {
 	
 	static main(args) {
 		def wrp = new WavRepositoryService()
-		println wrp.localWavDir
+		wrp.checkConfigs()
 		
 		def existingSids = wrp.amazonS3Wavs + wrp.BSWTWavs
-		println wrp.localWavs
-		
 		wrp.localWavs.findAll { !(it in existingSids) }.each {
 			wrp.makeMp3s it
 			wrp.uploadLocalWav it
 		}
+		
 	}
 }
 

@@ -39,6 +39,19 @@ task pushWavs(dependsOn: 'classes', type: JavaExec) {
 	
 	main = 'org.bswt.bag.WavRepositoryService'
 	classpath = sourceSets.main.runtimeClasspath
+	
+	// passing config
+	systemProperty 'bswt.wrp.plinkPath', project.'bswt.wrp.plinkPath'
+	systemProperty 'bswt.wrp.pscpPath',  project.'bswt.wrp.pscpPath'
+	systemProperty 'bswt.wrp.lamePath',  project.'bswt.wrp.lamePath'
+	systemProperty 'bswt.wrp.dir.wav',  project.'bswt.wrp.dir.wav'
+	systemProperty 'bswt.wrp.dir.mp3',  project.'bswt.wrp.dir.mp3'
+	systemProperty 'bswt.wrp.dir.mp3.hq',  project.'bswt.wrp.dir.mp3.hq'
+	systemProperty 'bswt.wrp.aws.s3.audio.bucket',  project.'bswt.wrp.aws.s3.audio.bucket'
+	systemProperty 'bswt.wrp.ssh.host',  project.'bswt.wrp.ssh.host'
+	systemProperty 'bswt.wrp.ssh.user', project.'bswt.wrp.ssh.user'
+	systemProperty 'bswt.wrp.ssh.dir.mp3',  project.'bswt.wrp.ssh.dir.mp3'
+	systemProperty 'bswt.wrp.ssh.dir.mp3.hq',  project.'bswt.wrp.ssh.dir.mp3.hq'
 } 
 
 task setWebsiteFlag(dependsOn: 'classes', type: JavaExec) {
