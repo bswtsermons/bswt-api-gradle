@@ -28,11 +28,21 @@ dependencies {
     testImplementation 'junit:junit:4.12'
     
     compile 'org.codehaus.groovy:groovy-all:2.4.13'
-    compile 'org.codehaus.groovy.modules.http-builder:http-builder:0.7.1'
+    compile 'org.codehaus.groovy.modules.http-builder:http-builder:0.7.+'
+	compile 'com.amazonaws:aws-java-sdk-s3:1.11.+'
+	compile 'ch.qos.logback:logback-classic:1.2.+'
 }
 
+task pushWavs(dependsOn: 'classes', type: JavaExec) {
+	group = 'bswt'
+	description = 'Encodes our wavs to mp3s and uploads them.'
+	
+	main = 'org.bswt.bag.WavRepositoryService'
+	classpath = sourceSets.main.runtimeClasspath
+} 
+
 task setWebsiteFlag(dependsOn: 'classes', type: JavaExec) {
-	group = 'bswt api'
+	group = 'bswt'
 	description = 'Sets a website flag for bswt.org.'
 	main = 'set-website-flag'
 	classpath = sourceSets.main.runtimeClasspath
