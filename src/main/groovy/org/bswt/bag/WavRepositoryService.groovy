@@ -14,8 +14,6 @@ import com.amazonaws.regions.Regions
 
 @Slf4j
 class WavRepositoryService {
-	def plinkPath = Paths.get(System.properties.'bswt.wrp.plinkPath')
-	def pscpPath = Paths.get(System.properties.'bswt.wrp.pscpPath')
 	def lamePath = Paths.get(System.properties.'bswt.wrp.lamePath')
 	def localWavDir = Paths.get(System.properties.'bswt.wrp.dir.wav')
 	def localMp3Dir = Paths.get(System.properties.'bswt.wrp.dir.mp3')
@@ -30,8 +28,6 @@ class WavRepositoryService {
 	def ssh = Ssh.newService()
 	
 	def checkConfigs()	{
-		assert plinkPath.toFile().exists() : "Specified plink executable exists"
-		assert pscpPath.toFile().exists() : "Specified pscp executable exists"
 		assert lamePath.toFile().exists() : "Specified lame executable exists"
 		
 		// maybe we want this to create automatically instead?
@@ -72,14 +68,6 @@ class WavRepositoryService {
 				agent = true
 			}
 		}
-	}
-	
-	def executePlinkCommand(cmd) {
-		executeCommand([ plinkPath.toString(), "-batch", sshUser+"@"+sshHost ] + cmd)
-	}
-	
-	def pscpCopy(file1, file2) {
-		executeCommand( [ pscpPath.toString(), "-q", file1, file2 ])
 	}
 	
 	def getAmazonS3Wavs() {
