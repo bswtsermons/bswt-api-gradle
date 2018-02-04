@@ -6,6 +6,7 @@ import com.amazonaws.services.s3.model.ListObjectsV2Request
 import com.amazonaws.services.s3.model.S3ObjectSummary
 import groovy.util.logging.Slf4j
 import java.nio.file.Paths
+import org.hidetake.groovy.ssh.Ssh
 
 import java.util.concurrent.TimeUnit
 
@@ -25,6 +26,8 @@ class WavRepositoryService {
 	def sshHost = System.properties.'bswt.wrp.ssh.host'
 	def bswtMp3Dir = System.properties.'bswt.wrp.ssh.dir.mp3'
 	def bswtHqMp3Dir = System.properties.'bswt.wrp.ssh.dir.mp3.hq'
+	
+	def ssh = Ssh.newService()
 	
 	def checkConfigs()	{
 		assert plinkPath.toFile().exists() : "Specified plink executable exists"
@@ -58,6 +61,18 @@ class WavRepositoryService {
 		process
 	}
 	
+	def init() {
+		ssh.settings {
+			knownHosts = allowAnyHosts
+		}
+		ssh.remotes {
+			bswt {
+				host = sshHost
+				user = sshUser
+				agent = true
+			}
+		}
+	}
 	
 	def executePlinkCommand(cmd) {
 		executeCommand([ plinkPath.toString(), "-batch", sshUser+"@"+sshHost ] + cmd)
@@ -69,7 +84,6 @@ class WavRepositoryService {
 	
 	def getAmazonS3Wavs() {
 		def s3 = AmazonS3ClientBuilder.standard().withRegion(Regions.US_EAST_1).build()
-		//def ol = s3.listObjects('video.bswt.org');
 		
 		log.debug 'connecting to aws'
 		boolean truncated = true
@@ -86,19 +100,25 @@ class WavRepositoryService {
 		}
 		
 		log.debug 'aws sids: {}', sids 
-		
 		sids
 	}
 	
 	def getBSWTWavs() {
-		def process = executePlinkCommand([ "cd", bswtMp3Dir+";", "ls", "*.mp3" ])
-		def sids = process.inputStream.readLines().findAll() { it =~ /^\d{10}\.mp3$/ }.collect{
-			def match = it =~ /^(\d{10})\.mp3$/
-			match[0][1]
+		def sids = []
+		
+		ssh.run {
+			session(ssh.remotes.bswt) {
+				execute("ls ${bswtMp3Dir}/*.mp3").eachLine {
+					def match = it =~ /(\d{10})\.mp3$/;
+					if (match) {
+						sids.add match[0][1]
+					}
+						
+				}
+			}
 		}
 		
 		log.debug 'bswt sids: {}', sids
-		
 		sids
 
 	}
@@ -107,10 +127,10 @@ class WavRepositoryService {
 		if (localWavDir.toFile().exists()) {
 			log.info 'wav direcotry {} did not exist; creating', localWavDir
 		}
-		def sids = localWavDir.toFile().list().findAll { it =~ /^\d{10}\.wav$/}.collect { it.substring(0, it.lastIndexOf(".")) }
+		def sids = localWavDir.toFile().list().findAll { it =~ /^\d{10}\.wav$/}
+		                                      .collect { it.substring(0, it.lastIndexOf(".")) }
 		
 		log.debug 'local sids: {}', sids
-		
 		sids
 	}
 	
@@ -123,14 +143,22 @@ class WavRepositoryService {
 		def remoteHqPath = bswtHqMp3Dir + '/' + sid+'.mp3'
 		
 		log.debug 'uploading lq mp3'
-		def process = pscpCopy([ localPath.toString(), sshUser+"@"+sshHost+":"+remotePath+'.part' ])
-		log.debug 'rename partial'
-		process = executePlinkCommand([ 'mv', remotePath+'.part', remotePath  ])
+		ssh.run {
+			session(ssh.remotes.bswt) {
+				put from: localPath, into: remotePath+'.part'
+				log.debug 'rename partial'
+				execute("mv ${remotePath}.part ${remotePath}") 
+			}
+		}
 		
 		log.debug 'uploading hq mp3'
-		process = executeCommand([ pscpPath.toString(), "-q", localHqPath.toString(), sshUser+"@"+sshHost+":"+remoteHqPath+'.part' ])
-		log.debug 'rename partial'
-		process = executePlinkCommand([ 'mv', remoteHqPath+'.part', remoteHqPath  ])
+		ssh.run {
+			session(ssh.remotes.bswt) {
+				put from: localHqPath, into: remoteHqPath+'.part'
+				log.debug 'rename partial'
+				execute("mv ${remoteHqPath}.part ${remoteHqPath}") 
+			}
+		}
 		
 	}
 	
@@ -168,6 +196,7 @@ class WavRepositoryService {
 	static main(args) {
 		def wrp = new WavRepositoryService()
 		wrp.checkConfigs()
+		wrp.init()
 		
 		def existingSids = wrp.amazonS3Wavs + wrp.BSWTWavs
 		wrp.localWavs.findAll { !(it in existingSids) }.each {
